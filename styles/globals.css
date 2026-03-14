@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg-top: #fff8e6;
+  --bg-bottom: #dff4f2;
+  --panel: rgba(255, 255, 255, 0.78);
+  --panel-border: rgba(255, 255, 255, 0.7);
+  --font-space-grotesk: "Avenir Next", "Trebuchet MS", sans-serif;
+  --font-manrope: "Helvetica Neue", "Avenir", sans-serif;
+}
+
+html,
+body,
+#__next {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-manrope), sans-serif;
+  color: #102542;
+  background:
+    radial-gradient(circle at top left, rgba(255, 214, 102, 0.55), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(15, 157, 138, 0.32), transparent 30%),
+    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+  background-attachment: fixed;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.glass-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(18px);
+}
+
+.page-shell {
+  min-height: 100vh;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.16) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.canvas-cursor {
+  cursor: crosshair;
+}

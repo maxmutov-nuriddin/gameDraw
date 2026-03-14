@@ -1,0 +1,192 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function roomPath(code) {
+      return /databases/$(database)/documents/rooms/$(code);
+    }
+
+    function roomData(code) {
+      return get(roomPath(code)).data;
+    }
+
+    function roomExists(code) {
+      return exists(roomPath(code));
+    }
+
+    function isParticipant(code) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/rooms/$(code)/players/$(request.auth.uid));
+    }
+
+    function isHost(code) {
+      return roomExists(code) && isParticipant(code) && roomData(code).hostId == request.auth.uid;
+    }
+
+    function isDrawer(code) {
+      return roomExists(code) && isParticipant(code) && roomData(code).currentDrawerId == request.auth.uid;
+    }
+
+    function isDrawerActivatingTurn(code) {
+      return isDrawer(code) &&
+        resource.data.drawerId == request.auth.uid &&
+        resource.data.status == 'choosing' &&
+        request.resource.data.status == 'drawing' &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'status',
+          'updatedAt'
+        ]);
+    }
+
+    function isJoiningRoom(code) {
+      return roomExists(code) &&
+        resource.data.status == 'lobby' &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'playerCount',
+          'updatedAt'
+        ]) &&
+        request.resource.data.playerCount == resource.data.playerCount + 1 &&
+        request.resource.data.playerCount <= resource.data.maxPlayers &&
+        !exists(/databases/$(database)/documents/rooms/$(code)/players/$(request.auth.uid)) &&
+        existsAfter(/databases/$(database)/documents/rooms/$(code)/players/$(request.auth.uid));
+    }
+
+    function hostRoomFields() {
+      return [
+        'status',
+        'round',
+        'playerOrder',
+        'currentDrawerId',
+        'currentTurnId',
+        'currentWordHash',
+        'maskedWord',
+        'revealedLetterIndexes',
+        'turnEndsAt',
+        'intermissionEndsAt',
+        'canvasRevision',
+        'firstCorrectId',
+        'gameWinnerId',
+        'gameWinnerName',
+        'playerCount',
+        'language',
+        'updatedAt'
+      ];
+    }
+
+    function drawerRoomFields() {
+      return [
+        'status',
+        'currentWordHash',
+        'maskedWord',
+        'revealedLetterIndexes',
+        'turnEndsAt',
+        'intermissionEndsAt',
+        'canvasRevision',
+        'updatedAt'
+      ];
+    }
+
+    match /rooms/{code} {
+      allow create: if isSignedIn() &&
+        request.resource.data.hostId == request.auth.uid &&
+        request.resource.data.code == code &&
+        request.resource.data.status == 'lobby';
+
+      allow read: if isSignedIn() &&
+        (
+          !roomExists(code) ||
+          isParticipant(code) ||
+          resource.data.status == 'lobby'
+        );
+
+      allow update: if isJoiningRoom(code) ||
+        isHost(code) &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(hostRoomFields()) ||
+        isDrawer(code) &&
+          (resource.data.status == 'choosing' || resource.data.status == 'drawing') &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(drawerRoomFields());
+
+      allow delete: if false;
+
+      match /players/{uid} {
+        allow read: if isSignedIn() && (isParticipant(code) || roomData(code).status == 'lobby');
+
+        allow create: if isSignedIn() &&
+          request.auth.uid == uid &&
+          request.resource.data.uid == uid;
+
+        allow update: if isSignedIn() &&
+          (
+            request.auth.uid == uid &&
+            request.resource.data.diff(resource.data).changedKeys().hasOnly([
+              'displayName',
+              'isReady',
+              'reaction',
+              'updatedAt'
+            ])
+          ||
+            isHost(code) &&
+            request.resource.data.diff(resource.data).changedKeys().hasOnly([
+              'isReady',
+              'score',
+              'reaction',
+              'updatedAt'
+            ])
+          );
+
+        allow delete: if false;
+      }
+
+      match /private/{uid} {
+        allow read, create, update: if isSignedIn() && (request.auth.uid == uid || isHost(code));
+        allow delete: if false;
+      }
+
+      match /turns/{turnId} {
+        allow read: if isSignedIn() && isParticipant(code);
+        allow create: if isHost(code);
+        allow update: if isHost(code) || isDrawerActivatingTurn(code);
+        allow delete: if false;
+
+        match /messages/{messageId} {
+          allow read: if isSignedIn() && isParticipant(code);
+
+          allow create: if isSignedIn() &&
+            (
+              (
+                request.auth.uid == request.resource.data.playerId &&
+                isParticipant(code) &&
+                request.resource.data.type == 'guess'
+              )
+            ||
+              (
+                isHost(code) &&
+                request.resource.data.playerId == 'system' &&
+                request.resource.data.type == 'system'
+              )
+            );
+
+          allow update: if isHost(code) &&
+            request.resource.data.diff(resource.data).changedKeys().hasOnly([
+              'isCorrect',
+              'rank',
+              'evaluatedAt'
+            ]);
+
+          allow delete: if false;
+        }
+
+        match /strokes/{strokeId} {
+          allow read: if isSignedIn() && isParticipant(code);
+          allow create: if isDrawer(code) && request.resource.data.drawerId == request.auth.uid;
+          allow update, delete: if false;
+        }
+      }
+    }
+    
+  }
+}
