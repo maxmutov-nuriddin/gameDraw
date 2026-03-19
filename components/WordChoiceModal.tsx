@@ -55,7 +55,14 @@ export function WordChoiceModal({ open, options, onSelect, disabled }: WordChoic
                 )}>
                   {t("option")} {index + 1} / {options.length}
                 </span>
-                <p className="font-display text-2xl font-black capitalize text-navy sm:text-3xl">
+                <p className={classNames(
+                  "font-display font-black capitalize text-navy break-words",
+                  option.length <= 8
+                    ? "text-2xl sm:text-3xl"
+                    : option.length <= 11
+                      ? "text-xl sm:text-2xl"
+                      : "text-lg sm:text-xl"
+                )}>
                   {option}
                 </p>
                 <p className="mt-2 text-xs text-slate-400">{option.length} {t("lettersLabel")}</p>

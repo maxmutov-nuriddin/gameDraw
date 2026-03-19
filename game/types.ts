@@ -59,6 +59,7 @@ export interface TurnDoc {
   status: "choosing" | "drawing" | "ended";
   guessedPlayerIds: string[];
   firstCorrectId: string | null;
+  choosingEndsAt?: number | null;
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }

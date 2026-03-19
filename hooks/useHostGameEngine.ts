@@ -58,16 +58,16 @@ export function useHostGameEngine({
 
   // Choosing phase timeout — skip drawer if they don't pick a word in time
   useEffect(() => {
-    if (!code || !uid || !room || room.hostId !== uid || room.status !== "choosing" || !room.choosingEndsAt) {
+    if (!code || !uid || !room || !turn || room.hostId !== uid || room.status !== "choosing" || !turn.choosingEndsAt) {
       return;
     }
 
     const timeout = window.setTimeout(() => {
       void skipDrawerTurn(code, uid);
-    }, Math.max(room.choosingEndsAt - Date.now(), 0) + 150);
+    }, Math.max(turn.choosingEndsAt - Date.now(), 0) + 150);
 
     return () => window.clearTimeout(timeout);
-  }, [code, room, uid]);
+  }, [code, room, turn, uid]);
 
   // Drawing phase timer
   useEffect(() => {
