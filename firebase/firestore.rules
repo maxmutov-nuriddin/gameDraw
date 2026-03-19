@@ -63,8 +63,10 @@ service cloud.firestore {
         'currentDrawerId',
         'currentTurnId',
         'currentWordHash',
+        'currentWordHashes',
         'maskedWord',
         'revealedLetterIndexes',
+        'choosingEndsAt',
         'turnEndsAt',
         'intermissionEndsAt',
         'canvasRevision',
@@ -81,8 +83,10 @@ service cloud.firestore {
       return [
         'status',
         'currentWordHash',
+        'currentWordHashes',
         'maskedWord',
         'revealedLetterIndexes',
+        'choosingEndsAt',
         'turnEndsAt',
         'intermissionEndsAt',
         'canvasRevision',
@@ -134,6 +138,7 @@ service cloud.firestore {
               'isReady',
               'score',
               'reaction',
+              'leftAt',
               'updatedAt'
             ])
           );
