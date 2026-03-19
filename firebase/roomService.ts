@@ -469,6 +469,7 @@ export async function selectWord(code: string, uid: string, turnId: string, word
     privateRef(code, uid),
     {
       turnId,
+      wordOptions: [],
       selectedWord: word,
       updatedAt: serverTimestamp()
     },

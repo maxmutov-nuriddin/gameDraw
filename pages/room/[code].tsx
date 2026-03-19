@@ -487,7 +487,8 @@ export default function RoomPage() {
                   isDrawer &&
                   room.status === "choosing" &&
                   privateState?.turnId === room.currentTurnId &&
-                  (privateState?.wordOptions?.length ?? 0) > 0
+                  (privateState?.wordOptions?.length ?? 0) > 0 &&
+                  !privateState?.selectedWord
                 )}
                 options={privateState?.wordOptions ?? []}
                 onSelect={handleSelectWord}
