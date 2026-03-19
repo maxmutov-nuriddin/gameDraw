@@ -6,6 +6,12 @@ import type { DrawingTool, RoomStatus, StrokeDoc } from "@/game/types";
 import { useI18n } from "@/hooks/useI18n";
 import { classNames } from "@/utils/classNames";
 
+const PALETTE = [
+  "#1a1a2e", "#e53e3e", "#dd6b20", "#d69e2e",
+  "#38a169", "#0f9d8a", "#3182ce", "#6b46c1",
+  "#d53f8c", "#ffffff", "#a0aec0", "#fffdf7"
+];
+
 interface CanvasBoardProps {
   isDrawer: boolean;
   canDraw: boolean;
@@ -63,6 +69,26 @@ function getRelativePoint(event: PointerEvent | ReactPointerEvent<HTMLCanvasElem
   };
 }
 
+function WordDisplay({ maskedWord }: { maskedWord: string }) {
+  const letters = maskedWord.split(" ");
+  return (
+    <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+      {letters.map((char, i) => {
+        if (char === "") return <span key={i} className="mx-1 w-3" />;
+        const isRevealed = char !== "_";
+        return (
+          <span
+            key={i}
+            className={classNames("word-letter", isRevealed ? "revealed" : "")}
+          >
+            {isRevealed ? char : ""}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CanvasBoard({
   isDrawer,
   canDraw,
@@ -76,7 +102,7 @@ export function CanvasBoard({
 }: CanvasBoardProps) {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [color, setColor] = useState("#102542");
+  const [color, setColor] = useState("#1a1a2e");
   const [tool, setTool] = useState<DrawingTool>("brush");
   const [size, setSize] = useState(DEFAULT_BRUSH_SIZE);
   const [previewPoints, setPreviewPoints] = useState<number[]>([]);
@@ -140,7 +166,6 @@ export function CanvasBoard({
       return;
     }
 
-    // We stream chunked polylines instead of every pointer move to keep Firestore writes lower.
     let segment = force ? [...buffer] : buffer.slice(0, buffer.length - 2);
 
     if (segment.length === 2) {
@@ -206,71 +231,124 @@ export function CanvasBoard({
   };
 
   return (
-    <Panel className="overflow-hidden p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("sketchBoard")}</p>
-          <h2 className="mt-1 font-display text-2xl font-bold text-navy sm:text-3xl">
-            {isDrawer && drawerWord
-              ? t("drawWord", { word: drawerWord })
-              : status === "choosing"
-                ? t("waitingWordChoice")
-                : maskedWord || t("waitingForDrawer")}
+    <Panel className="overflow-hidden p-4 sm:p-5">
+      {/* Word display */}
+      <div className="mb-4">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+          {isDrawer ? t("drawThisWord") : status === "choosing" ? t("waitingWordChoice") : t("guessTheWord")}
+        </p>
+        {isDrawer && drawerWord ? (
+          <h2 className="font-display text-2xl font-bold text-navy sm:text-3xl">
+            {drawerWord}
           </h2>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-          <button
-            type="button"
-            disabled={!canDraw}
-            onClick={() => setTool("brush")}
-            className={classNames(
-              "rounded-2xl px-4 py-2 font-semibold transition",
-              tool === "brush" ? "bg-navy text-white" : "bg-white text-slate-600",
-              !canDraw ? "cursor-not-allowed opacity-60" : ""
-            )}
-          >
-            {t("brush")}
-          </button>
-          <button
-            type="button"
-            disabled={!canDraw}
-            onClick={() => setTool("eraser")}
-            className={classNames(
-              "rounded-2xl px-4 py-2 font-semibold transition",
-              tool === "eraser" ? "bg-navy text-white" : "bg-white text-slate-600",
-              !canDraw ? "cursor-not-allowed opacity-60" : ""
-            )}
-          >
-            {t("eraser")}
-          </button>
-          <input
-            type="color"
-            value={color}
-            disabled={!canDraw || tool === "eraser"}
-            onChange={(event) => setColor(event.target.value)}
-            className="h-11 w-14 cursor-pointer rounded-2xl border-0 bg-transparent p-0 disabled:cursor-not-allowed"
-          />
-          <input
-            type="range"
-            min={2}
-            max={MAX_BRUSH_SIZE}
-            value={size}
-            disabled={!canDraw}
-            onChange={(event) => setSize(Number(event.target.value))}
-            className="col-span-2 w-full accent-teal sm:w-32 disabled:cursor-not-allowed"
-          />
-          <button
-            type="button"
-            disabled={!canDraw}
-            onClick={() => void onClear()}
-            className="rounded-2xl bg-coral px-4 py-2 font-semibold text-white transition hover:bg-[#ef593f] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {t("clear")}
-          </button>
-        </div>
+        ) : status === "choosing" ? (
+          <h2 className="font-display text-2xl font-semibold text-slate-400 sm:text-3xl">
+            {t("waitingWordChoice")}
+          </h2>
+        ) : maskedWord ? (
+          <WordDisplay maskedWord={maskedWord} />
+        ) : (
+          <h2 className="font-display text-2xl font-semibold text-slate-400 sm:text-3xl">
+            {t("waitingForDrawer")}
+          </h2>
+        )}
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-[28px] border border-[#eadfcb] bg-[#fffdf7] shadow-soft">
+      {/* Toolbar */}
+      {canDraw && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl bg-white/60 p-2.5">
+          {/* Brush / Eraser */}
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setTool("brush")}
+              title="Brush"
+              className={classNames(
+                "flex h-9 w-9 items-center justify-center rounded-xl text-lg transition-all",
+                tool === "brush"
+                  ? "bg-navy text-white shadow-soft"
+                  : "bg-white/80 text-slate-500 hover:bg-white"
+              )}
+            >
+              🖌️
+            </button>
+            <button
+              type="button"
+              onClick={() => setTool("eraser")}
+              title="Eraser"
+              className={classNames(
+                "flex h-9 w-9 items-center justify-center rounded-xl text-lg transition-all",
+                tool === "eraser"
+                  ? "bg-navy text-white shadow-soft"
+                  : "bg-white/80 text-slate-500 hover:bg-white"
+              )}
+            >
+              🧹
+            </button>
+          </div>
+
+          {/* Size */}
+          <div className="flex flex-1 items-center gap-2 px-1">
+            <span className="text-xs font-semibold text-slate-400">{size}px</span>
+            <input
+              type="range"
+              min={2}
+              max={MAX_BRUSH_SIZE}
+              value={size}
+              onChange={(event) => setSize(Number(event.target.value))}
+              className="flex-1 accent-teal"
+            />
+          </div>
+
+          {/* Palette */}
+          <div className="flex flex-wrap gap-1.5">
+            {PALETTE.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => { setColor(c); setTool("brush"); }}
+                title={c}
+                className={classNames(
+                  "h-7 w-7 rounded-lg border-2 transition-all hover:scale-110",
+                  color === c && tool === "brush"
+                    ? "border-navy scale-110 shadow-soft"
+                    : "border-white/80"
+                )}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+            <label className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border-2 border-white/80 bg-white/80 text-xs transition hover:scale-110" title="Custom color">
+              +
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => { setColor(e.target.value); setTool("brush"); }}
+                className="sr-only"
+              />
+            </label>
+          </div>
+
+          {/* Clear */}
+          <button
+            type="button"
+            onClick={() => void onClear()}
+            className="flex h-9 items-center gap-1.5 rounded-xl bg-rose-50 px-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-100"
+          >
+            🗑️ {t("clear")}
+          </button>
+        </div>
+      )}
+
+      {/* Non-drawer toolbar placeholder showing word info */}
+      {!canDraw && status === "drawing" && (
+        <div className="mb-3 flex items-center gap-2 rounded-2xl bg-white/40 px-3 py-2 text-sm text-slate-500">
+          <span className="text-base">👁️</span>
+          <span>{t("watchingHint")}</span>
+        </div>
+      )}
+
+      {/* Canvas */}
+      <div className="overflow-hidden rounded-[20px] border-2 border-[#eadfcb] bg-[#fffdf7] shadow-soft">
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
@@ -280,8 +358,8 @@ export function CanvasBoard({
           onPointerUp={finishStroke}
           onPointerLeave={finishStroke}
           className={classNames(
-            "canvas-cursor block w-full touch-none bg-[#fffdf7]",
-            canDraw ? "" : "cursor-not-allowed opacity-95"
+            "block w-full touch-none bg-[#fffdf7]",
+            canDraw ? "canvas-cursor" : "cursor-default"
           )}
         />
       </div>

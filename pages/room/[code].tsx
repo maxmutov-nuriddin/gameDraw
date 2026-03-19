@@ -23,7 +23,6 @@ import {
   startGame,
   toggleReady
 } from "@/firebase/roomService";
-import { MIN_PLAYERS } from "@/game/constants";
 import { getLeaderboard } from "@/firebase/roomService";
 import { useAnonymousAuth } from "@/hooks/useAnonymousAuth";
 import { useCountdown } from "@/hooks/useCountdown";
@@ -36,7 +35,7 @@ import { formatRoomStatus, localizeErrorMessage } from "@/utils/i18n";
 
 export default function RoomPage() {
   const router = useRouter();
-  const code = typeof router.query.code === "string" ? router.query.code.toUpperCase() : null;
+  const code = typeof router.query.code === "string" ? router.query.code.replace(/\D/g, "") || null : null;
   const { user, loading: authLoading, error: authError } = useAnonymousAuth();
   const { displayName, setDisplayName } = useDisplayName();
   const { locale, t } = useI18n();
@@ -54,7 +53,7 @@ export default function RoomPage() {
     Boolean(privateState?.selectedWord) &&
     room.currentTurnId === privateState?.turnId;
   const canGuess = Boolean(room && user && room.status === "drawing" && room.currentDrawerId !== user.uid);
-  const canStart = Boolean(room && currentPlayer && room.hostId === currentPlayer.uid && players.length >= MIN_PLAYERS);
+  const canStart = Boolean(room && currentPlayer && room.hostId === currentPlayer.uid && players.length >= (room?.minPlayers ?? 2));
 
   useHostGameEngine({
     code,
@@ -101,7 +100,7 @@ export default function RoomPage() {
     }
 
     await withAction("start", async () => {
-      await startGame(code, user.uid, players);
+      await startGame(code, user.uid, players, room?.minPlayers, room?.maxPlayers);
     });
   };
 
@@ -173,10 +172,22 @@ export default function RoomPage() {
   if (authLoading || loading) {
     return (
       <main className="page-shell flex min-h-screen items-center justify-center px-4 py-10">
-        <Panel className="w-full max-w-lg p-8 text-center">
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("loadingRoom")}</p>
-          <h1 className="mt-4 font-display text-4xl font-bold text-navy">{t("connectingEveryone")}</h1>
-          <p className="mt-3 text-slate-600">{t("loadingDescription")}</p>
+        <Panel className="w-full max-w-md p-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-teal/10 text-3xl">
+            🎨
+          </div>
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{t("loadingRoom")}</p>
+          <h1 className="mt-3 font-display text-3xl font-black text-navy">{t("connectingEveryone")}</h1>
+          <p className="mt-2 text-slate-500">{t("loadingDescription")}</p>
+          <div className="mt-6 flex justify-center gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-2 w-2 rounded-full bg-teal animate-bounce"
+                style={{ animationDelay: `${i * 0.15}s` }}
+              />
+            ))}
+          </div>
         </Panel>
       </main>
     );
@@ -185,10 +196,10 @@ export default function RoomPage() {
   if (authError) {
     return (
       <main className="page-shell flex min-h-screen items-center justify-center px-4 py-10">
-        <Panel className="w-full max-w-lg p-8">
-          <p className="text-sm uppercase tracking-[0.24em] text-rose-500">{t("firebaseAuthError")}</p>
+        <Panel className="w-full max-w-md p-8">
+          <p className="text-xs font-bold uppercase tracking-widest text-rose-500">{t("firebaseAuthError")}</p>
           <p className="mt-4 text-slate-700">{localizeErrorMessage(locale, authError)}</p>
-          <Link href="/" className="mt-6 inline-flex rounded-2xl bg-navy px-5 py-3 font-semibold text-white">
+          <Link href="/" className="btn-primary mt-6 inline-flex">
             {t("backHome")}
           </Link>
         </Panel>
@@ -199,10 +210,10 @@ export default function RoomPage() {
   if (!code || !room) {
     return (
       <main className="page-shell flex min-h-screen items-center justify-center px-4 py-10">
-        <Panel className="w-full max-w-lg p-8">
-          <p className="text-sm uppercase tracking-[0.24em] text-rose-500">{t("roomUnavailable")}</p>
+        <Panel className="w-full max-w-md p-8">
+          <p className="text-xs font-bold uppercase tracking-widest text-rose-500">{t("roomUnavailable")}</p>
           <p className="mt-4 text-slate-700">{localizeErrorMessage(locale, error) ?? t("roomCouldNotLoad")}</p>
-          <Link href="/" className="mt-6 inline-flex rounded-2xl bg-navy px-5 py-3 font-semibold text-white">
+          <Link href="/" className="btn-primary mt-6 inline-flex">
             {t("backHome")}
           </Link>
         </Panel>
@@ -215,6 +226,7 @@ export default function RoomPage() {
       <>
         <Head>
           <title>{t("joinRoomLabel", { code })} | {t("appName")}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
         </Head>
         <RoomGate
           code={code}
@@ -232,53 +244,69 @@ export default function RoomPage() {
     <>
       <Head>
         <title>{t("roomLabel", { code })} | {t("appName")}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
       </Head>
 
       <div className="page-shell min-h-screen">
-        <div className="mx-auto max-w-[1540px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="mx-auto max-w-[1600px] px-3 py-4 sm:px-5 lg:px-8 lg:py-6">
+
+          {/* Header */}
+          <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("realtimeGameRoom")}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <h1 className="font-display text-3xl font-bold text-navy sm:text-4xl">{t("roomLabel", { code: room.code })}</h1>
-                <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-soft">
-                  {t("playersCounter", { count: players.length, max: room.maxPlayers })}
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href="/" className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition">
+                  {t("backToHome")}
+                </Link>
+                <span className="text-slate-300">/</span>
+                <h1 className="font-display text-xl font-black text-navy sm:text-2xl">
+                  {t("roomLabel", { code: room.code })}
+                </h1>
+                <span className="rounded-xl bg-white/80 px-3 py-1 text-xs font-bold text-slate-500 shadow-soft">
+                  {players.length}/{room.maxPlayers} 👥 {t("players")}
                 </span>
-                <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold capitalize text-teal shadow-soft">
+                <span className={`rounded-xl px-3 py-1 text-xs font-bold shadow-soft ${
+                  room.status === "drawing"
+                    ? "bg-emerald-50 text-emerald-700"
+                    : room.status === "choosing"
+                      ? "bg-amber-50 text-amber-700"
+                      : room.status === "round_end"
+                        ? "bg-blue-50 text-blue-700"
+                        : "bg-white/80 text-slate-500"
+                }`}>
                   {formatRoomStatus(locale, room.status)}
                 </span>
-                <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-soft">
-                  {t("gameLanguage")}: {LOCALE_LABELS[room.language ?? "en"]}
+                <span className="rounded-xl bg-white/80 px-3 py-1 text-xs font-semibold text-slate-400 shadow-soft">
+                  {LOCALE_LABELS[room.language ?? "en"]}
                 </span>
               </div>
             </div>
-            <div className="flex flex-col items-start gap-3 sm:items-end">
+            <div className="flex items-center gap-2">
               <LanguageSwitcher />
-              <div className="flex flex-wrap gap-3">
-              <Link href="/" className="rounded-2xl bg-white px-5 py-3 font-semibold text-slate-700 shadow-soft">
-                {t("leaveRoom")}
-              </Link>
               {room.hostId === currentPlayer.uid && room.status === "finished" ? (
                 <button
                   type="button"
                   onClick={() => void handleReset()}
                   disabled={busyAction === "reset"}
-                  className="rounded-2xl bg-navy px-5 py-3 font-semibold text-white transition hover:bg-slate-900 disabled:opacity-60"
+                  className="btn-primary"
                 >
-                  {t("playAgain")}
+                  🔄 {t("playAgain")}
                 </button>
               ) : null}
-              </div>
+              <Link href="/" className="rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-white">
+                {t("leaveRoom")}
+              </Link>
             </div>
           </header>
 
+          {/* Error banner */}
           {actionError ? (
-            <Panel className="mb-6 p-4">
-              <p className="text-sm text-rose-700">{actionError}</p>
-            </Panel>
+            <div className="mb-4 flex items-center gap-3 rounded-2xl bg-rose-50 px-4 py-3 ring-1 ring-rose-200 animate-shake">
+              <span>⚠️</span>
+              <p className="text-sm font-semibold text-rose-700">{actionError}</p>
+            </div>
           ) : null}
 
+          {/* Lobby */}
           {room.status === "lobby" ? (
             <LobbyPanel
               room={room}
@@ -290,27 +318,55 @@ export default function RoomPage() {
               starting={busyAction === "start" || !canStart}
             />
           ) : room.status === "finished" ? (
-            <Panel className="p-8">
-              <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("matchComplete")}</p>
-              <h2 className="mt-3 font-display text-5xl font-bold text-navy">
-                {room.gameWinnerName ? t("winnerTitle", { name: room.gameWinnerName }) : t("gameOver")}
-              </h2>
-              <p className="mt-3 max-w-2xl text-slate-600">{t("finishedDescription")}</p>
+            /* Finished screen */
+            <Panel className="p-6 md:p-10 animate-pop-in">
+              <div className="text-center">
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{t("matchComplete")}</p>
+                <h2 className="mt-3 font-display text-4xl font-black text-navy sm:text-5xl">
+                  {room.gameWinnerName ? `🏆 ${t("winnerTitle", { name: room.gameWinnerName })}` : t("gameOver")}
+                </h2>
+                <p className="mt-2 text-slate-500">{t("finishedDescription")}</p>
+              </div>
 
-              <div className="mt-8 grid gap-4 md:grid-cols-3">
+              <div className="mt-10 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 {leaderboard.map((player, index) => (
-                  <div key={player.uid} className="rounded-[24px] bg-white/80 p-5 shadow-soft">
-                    <p className="text-sm uppercase tracking-[0.2em] text-slate-500">#{index + 1}</p>
-                    <p className="mt-2 font-display text-3xl font-bold text-navy">{player.displayName}</p>
-                    <p className="mt-3 text-xl font-semibold text-slate-700">{t("pointsLong", { score: player.score })}</p>
+                  <div
+                    key={player.uid}
+                    className={`relative overflow-hidden rounded-[22px] p-5 animate-slide-up ${
+                      index === 0
+                        ? "bg-gradient-to-br from-amber-50 to-yellow-100 ring-2 ring-amber-300"
+                        : index === 1
+                          ? "bg-gradient-to-br from-slate-50 to-gray-100 ring-1 ring-slate-200"
+                          : index === 2
+                            ? "bg-gradient-to-br from-orange-50 to-amber-50 ring-1 ring-orange-200"
+                            : "bg-white/80 ring-1 ring-slate-100"
+                    }`}
+                    style={{ animationDelay: `${index * 80}ms` }}
+                  >
+                    <p className="text-2xl">{index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`}</p>
+                    <div
+                      className="avatar-ring mt-3 grid h-12 w-12 place-items-center rounded-xl text-sm font-black text-white"
+                      style={{ backgroundColor: player.color }}
+                    >
+                      {player.displayName.slice(0, 2).toUpperCase()}
+                    </div>
+                    <p className="mt-2 font-display text-xl font-black text-navy">{player.displayName}</p>
+                    <p className="mt-1 text-2xl font-black text-slate-700">{player.score}</p>
+                    <p className="text-xs text-slate-400">{t("pointsLong", { score: player.score })}</p>
+                    {player.uid === currentPlayer.uid && (
+                      <span className="absolute right-3 top-3 rounded-full bg-teal/10 px-2 py-0.5 text-[10px] font-bold text-teal">
+                        {t("youLabel")}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
             </Panel>
           ) : (
+            /* Game in progress */
             <>
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_340px] xl:grid-cols-[minmax(0,1.35fr)_380px]">
-                <div className="grid gap-6">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_320px] xl:grid-cols-[minmax(0,1.4fr)_360px]">
+                <div className="flex flex-col gap-4">
                   <CanvasBoard
                     isDrawer={Boolean(isDrawer)}
                     canDraw={Boolean(canDraw)}
@@ -341,24 +397,25 @@ export default function RoomPage() {
                 />
               </div>
 
+              {/* Round end banner */}
               {room.status === "round_end" ? (
-                <Panel className="mt-6 p-5">
-                  <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("roundRecap")}</p>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
+                <Panel className="mt-4 p-5 animate-pop-in">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                      <h3 className="font-display text-3xl font-bold text-navy">
+                      <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{t("roundRecap")}</p>
+                      <h3 className="mt-1.5 font-display text-2xl font-black text-navy sm:text-3xl">
                         {room.firstCorrectId
-                          ? t("playerSolvedFirst", {
+                          ? `🎉 ${t("playerSolvedFirst", {
                               name: players.find((player) => player.uid === room.firstCorrectId)?.displayName ?? t("genericPlayer")
-                            })
-                          : t("nobodySolved")}
+                            })}`
+                          : `😅 ${t("nobodySolved")}`}
                       </h3>
-                      <p className="mt-2 text-slate-600">{t("nextRoundSoon")}</p>
+                      <p className="mt-1 text-slate-500">{t("nextRoundSoon")}</p>
                     </div>
-                    <div className="rounded-[22px] bg-white px-5 py-4 text-center shadow-soft">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{t("intermission")}</p>
-                      <p className="mt-1 font-display text-4xl font-bold text-navy">
-                        {intermissionSeconds}s
+                    <div className="rounded-2xl bg-navy px-6 py-4 text-center text-white shadow-soft">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-white/60">{t("intermission")}</p>
+                      <p className="mt-1 font-display text-4xl font-black">
+                        {intermissionSeconds}<span className="text-xl text-white/60">s</span>
                       </p>
                     </div>
                   </div>
@@ -367,10 +424,10 @@ export default function RoomPage() {
 
               <WordChoiceModal
                 open={Boolean(
-                    isDrawer &&
-                    room.status === "choosing" &&
-                    privateState?.turnId === room.currentTurnId &&
-                    (privateState?.wordOptions?.length ?? 0) > 0
+                  isDrawer &&
+                  room.status === "choosing" &&
+                  privateState?.turnId === room.currentTurnId &&
+                  (privateState?.wordOptions?.length ?? 0) > 0
                 )}
                 options={privateState?.wordOptions ?? []}
                 onSelect={handleSelectWord}

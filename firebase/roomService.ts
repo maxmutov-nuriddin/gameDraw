@@ -31,27 +31,27 @@ import { hashWord, normalizeWord } from "@/utils/hash";
 import type { Locale } from "@/utils/i18n";
 
 function roomRef(code: string) {
-  return doc(db, "rooms", code.toUpperCase());
+  return doc(db, "rooms", code);
 }
 
 function playerRef(code: string, uid: string) {
-  return doc(db, "rooms", code.toUpperCase(), "players", uid);
+  return doc(db, "rooms", code, "players", uid);
 }
 
 function privateRef(code: string, uid: string) {
-  return doc(db, "rooms", code.toUpperCase(), "private", uid);
+  return doc(db, "rooms", code, "private", uid);
 }
 
 function turnRef(code: string, turnId: string) {
-  return doc(db, "rooms", code.toUpperCase(), "turns", turnId);
+  return doc(db, "rooms", code, "turns", turnId);
 }
 
 function messageCollectionRef(code: string, turnId: string) {
-  return collection(db, "rooms", code.toUpperCase(), "turns", turnId, "messages");
+  return collection(db, "rooms", code, "turns", turnId, "messages");
 }
 
 function strokeCollectionRef(code: string, turnId: string) {
-  return collection(db, "rooms", code.toUpperCase(), "turns", turnId, "strokes");
+  return collection(db, "rooms", code, "turns", turnId, "strokes");
 }
 
 function makeTurnId() {
@@ -165,7 +165,7 @@ export async function createRoom(uid: string, displayName: string, language: Loc
 }
 
 export async function joinRoom(code: string, uid: string, displayName: string) {
-  const normalizedCode = code.trim().toUpperCase();
+  const normalizedCode = code.trim().replace(/\D/g, "");
   const roomSnapshot = await getDoc(roomRef(normalizedCode));
 
   if (!roomSnapshot.exists()) {
@@ -175,7 +175,7 @@ export async function joinRoom(code: string, uid: string, displayName: string) {
   const room = roomSnapshot.data() as RoomDoc;
   const playerSnapshot = await getDoc(playerRef(normalizedCode, uid));
 
-  if (!playerSnapshot.exists() && room.playerCount >= MAX_PLAYERS) {
+  if (!playerSnapshot.exists() && room.playerCount >= room.maxPlayers) {
     throw new Error("This room is full.");
   }
 
@@ -277,9 +277,9 @@ export async function clearCanvas(code: string, uid: string) {
   });
 }
 
-export async function startGame(code: string, hostId: string, players: PlayerDoc[]) {
-  if (players.length < MIN_PLAYERS || players.length > MAX_PLAYERS) {
-    throw new Error(`Start is available when ${MIN_PLAYERS}-${MAX_PLAYERS} players are present.`);
+export async function startGame(code: string, hostId: string, players: PlayerDoc[], roomMinPlayers = MIN_PLAYERS, roomMaxPlayers = MAX_PLAYERS) {
+  if (players.length < roomMinPlayers || players.length > roomMaxPlayers) {
+    throw new Error("Only the host can start the game.");
   }
 
   await updatePlayersForNewGame(code, players);

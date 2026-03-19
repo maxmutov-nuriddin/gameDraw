@@ -29,53 +29,76 @@ export function CreateJoinCard({
   };
 
   return (
-    <Panel className="mt-10 p-6 md:p-8">
-      <div className="grid gap-8 lg:grid-cols-[1fr_1fr]">
-        <div className="space-y-4">
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("playerProfile")}</p>
-          <label className="block space-y-2">
-            <span className="text-sm font-semibold text-slate-700">{t("displayName")}</span>
-            <input
-              value={displayName}
-              maxLength={18}
-              onChange={(event) => onNameChange(event.target.value)}
-              placeholder={t("displayNamePlaceholder")}
-              className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-3 outline-none ring-0 transition focus:border-teal focus:bg-white"
-            />
-          </label>
+    <Panel className="p-6 md:p-8 animate-pop-in">
+      {/* Name field */}
+      <div className="mb-7">
+        <label className="block">
+          <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">{t("playerProfile")}</p>
+          <p className="mb-3 text-sm font-semibold text-slate-600">{t("displayName")}</p>
+          <input
+            value={displayName}
+            maxLength={18}
+            onChange={(event) => onNameChange(event.target.value)}
+            placeholder={t("displayNamePlaceholder")}
+            className="input-field text-base"
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-2">
+        {/* Create room */}
+        <div className="flex flex-col gap-3 rounded-2xl p-5" style={{ background: "rgba(16,37,66,0.04)" }}>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{t("createRoom")}</p>
+            <p className="mt-1 text-base font-bold text-navy">{t("createRoomSubtitle")}</p>
+            <p className="mt-1 text-sm text-slate-400">{t("createRoomHelp")}</p>
+          </div>
           <button
             type="button"
             disabled={loading}
             onClick={() => void onCreate()}
-            className="w-full rounded-2xl bg-navy px-5 py-3 text-base font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            className="btn-primary w-full"
           >
-            {t("createRoom")}
+            {loading ? t("creating") : `🎮 ${t("createRoom")}`}
           </button>
         </div>
 
-        <form className="space-y-4" onSubmit={handleJoin}>
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("joinFriend")}</p>
-          <label className="block space-y-2">
-            <span className="text-sm font-semibold text-slate-700">{t("roomCode")}</span>
-            <input
-              value={roomCode}
-              maxLength={6}
-              onChange={(event) => setRoomCode(event.target.value.toUpperCase())}
-              placeholder="AB12CD"
-              className="w-full rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-lg uppercase tracking-[0.28em] outline-none transition focus:border-coral focus:bg-white"
-            />
-          </label>
+        {/* Join room */}
+        <form
+          className="flex flex-col gap-3 rounded-2xl p-5"
+          style={{ background: "rgba(255,107,87,0.05)" }}
+          onSubmit={handleJoin}
+        >
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{t("joinRoom")}</p>
+            <p className="mt-1 text-base font-bold text-navy">{t("joinRoomSubtitle")}</p>
+            <p className="mt-1 text-sm text-slate-400">{t("joinRoomHelp6Digit")}</p>
+          </div>
+          <input
+            value={roomCode}
+            maxLength={6}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            onChange={(event) => setRoomCode(event.target.value.replace(/\D/g, ""))}
+            placeholder={t("roomCodePlaceholder")}
+            className="input-field text-center text-xl font-black tracking-[0.3em]"
+          />
           <button
             type="submit"
-            disabled={loading}
-            className="w-full rounded-2xl bg-coral px-5 py-3 text-base font-semibold text-white transition hover:bg-[#ef593f] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={loading || roomCode.length < 6}
+            className="btn-coral w-full"
           >
-            {t("joinRoom")}
+            {loading ? t("joining") : `🚀 ${t("joinRoom")}`}
           </button>
         </form>
       </div>
 
-      {error ? <p className="mt-5 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p> : null}
+      {error ? (
+        <div className="mt-5 animate-shake flex items-start gap-3 rounded-2xl bg-rose-50 px-4 py-3.5 ring-1 ring-rose-200">
+          <span className="text-lg">⚠️</span>
+          <p className="text-sm font-semibold text-rose-700">{error}</p>
+        </div>
+      ) : null}
     </Panel>
   );
 }

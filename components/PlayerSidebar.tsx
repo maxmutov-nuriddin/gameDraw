@@ -25,30 +25,48 @@ export function PlayerSidebar({
 }: PlayerSidebarProps) {
   const { t } = useI18n();
   const leaderboard = getLeaderboard(players);
+  const isLow = secondsLeft <= 15 && secondsLeft > 0 && room.status === "drawing";
+  const isDanger = secondsLeft <= 8 && secondsLeft > 0 && room.status === "drawing";
 
   return (
-    <div className="space-y-4">
-      <Panel className="p-5">
-        <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-4">
+      {/* Timer + Round + Reactions */}
+      <Panel className="p-4">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("round")}</p>
-            <p className="mt-2 font-display text-3xl font-bold text-navy">
-              {room.round}/{room.totalRounds}
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{t("round")}</p>
+            <p className="mt-1 font-display text-2xl font-bold text-navy">
+              {room.round}<span className="text-lg text-slate-400">/{room.totalRounds}</span>
             </p>
           </div>
-          <div className="rounded-[22px] bg-navy px-5 py-4 text-center text-white shadow-soft">
-            <p className="text-xs uppercase tracking-[0.2em] text-white/70">{t("timer")}</p>
-            <p className="mt-1 font-display text-4xl font-bold">{secondsLeft}s</p>
+          <div
+            className={classNames(
+              "flex flex-col items-center justify-center rounded-2xl px-5 py-3 text-white shadow-soft transition-all duration-300",
+              isDanger
+                ? "timer-danger"
+                : isLow
+                  ? "bg-gradient-to-br from-amber-500 to-orange-500"
+                  : "bg-gradient-to-br from-navy to-slate-700"
+            )}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70">{t("timer")}</p>
+            <p className={classNames(
+              "font-display font-bold leading-none transition-all",
+              isDanger ? "text-4xl" : "text-3xl"
+            )}>
+              {secondsLeft}
+              <span className="text-sm text-white/70">s</span>
+            </p>
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-1.5">
           {REACTIONS.map((reaction) => (
             <button
               key={reaction}
               type="button"
               onClick={() => void onReaction(reaction)}
-              className="rounded-2xl bg-white px-4 py-2 text-2xl shadow-soft transition hover:-translate-y-0.5"
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 text-xl shadow-soft transition hover:-translate-y-0.5 hover:shadow-md active:scale-90"
             >
               {reaction}
             </button>
@@ -56,61 +74,97 @@ export function PlayerSidebar({
         </div>
       </Panel>
 
-      <Panel className="p-5">
-        <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("players")}</p>
-        <div className="mt-4 space-y-3">
+      {/* Players list */}
+      <Panel className="p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{t("players")}</p>
+        <div className="space-y-2" data-scroll style={{ maxHeight: players.length > 6 ? "340px" : "none", overflowY: players.length > 6 ? "auto" : "visible" }}>
           {players.map((player) => {
             const isDrawer = room.currentDrawerId === player.uid;
             const hasGuessed = turn?.guessedPlayerIds.includes(player.uid);
+            const isMe = player.uid === currentUserId;
             return (
               <div
                 key={player.uid}
                 className={classNames(
-                  "rounded-[22px] px-4 py-4 transition",
-                  isDrawer ? "bg-sand" : "bg-white/80",
-                  player.uid === currentUserId ? "ring-2 ring-teal/50" : ""
+                  "relative flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all",
+                  isDrawer
+                    ? "bg-amber-50 ring-1 ring-amber-200"
+                    : isMe
+                      ? "bg-teal/5 ring-1 ring-teal/30"
+                      : "bg-white/70"
                 )}
               >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="grid h-11 w-11 place-items-center rounded-2xl text-sm font-bold text-white"
-                    style={{ backgroundColor: player.color }}
-                  >
-                    {getDisplayInitials(player.displayName)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-semibold text-navy">{player.displayName}</p>
-                      {isDrawer ? (
-                        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
-                          {t("drawing")}
-                        </span>
-                      ) : null}
-                      {hasGuessed ? (
-                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                          {t("solved")}
-                        </span>
-                      ) : null}
-                    </div>
-                    {player.reaction ? <p className="mt-1 text-2xl">{player.reaction}</p> : null}
-                  </div>
-                  <p className="font-display text-3xl font-bold text-navy">{player.score}</p>
+                <div
+                  className="avatar-ring grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold text-white"
+                  style={{ backgroundColor: player.color }}
+                >
+                  {getDisplayInitials(player.displayName)}
                 </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className={classNames("truncate text-sm font-bold", isMe ? "text-teal" : "text-navy")}>
+                      {player.displayName}
+                      {isMe && <span className="ml-1 text-xs font-normal text-teal/70">{t("youLabel")}</span>}
+                    </p>
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    {isDrawer && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                        ✏️ {t("drawing")}
+                      </span>
+                    )}
+                    {hasGuessed && !isDrawer && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                        ✓ {t("solved")}
+                      </span>
+                    )}
+                  </div>
+                  {player.reaction && (
+                    <p className="mt-0.5 animate-bounce-in text-xl leading-none">{player.reaction}</p>
+                  )}
+                </div>
+                <p className="font-display text-2xl font-black text-navy tabular-nums">{player.score}</p>
               </div>
             );
           })}
         </div>
       </Panel>
 
-      <Panel className="p-5">
-        <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{t("leaderboard")}</p>
-        <div className="mt-4 space-y-3">
-          {leaderboard.map((player, index) => (
-            <div key={player.uid} className="flex items-center justify-between rounded-2xl bg-white/80 px-4 py-3">
-              <p className="font-semibold text-navy">
-                #{index + 1} {player.displayName}
+      {/* Leaderboard */}
+      <Panel className="p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{t("leaderboard")}</p>
+        <div className="space-y-2">
+          {leaderboard.slice(0, 8).map((player, index) => (
+            <div
+              key={player.uid}
+              className={classNames(
+                "flex items-center justify-between rounded-xl px-3 py-2",
+                index === 0
+                  ? "bg-gradient-to-r from-amber-50 to-yellow-50 ring-1 ring-amber-200"
+                  : index === 1
+                    ? "bg-slate-50 ring-1 ring-slate-200"
+                    : index === 2
+                      ? "bg-orange-50 ring-1 ring-orange-200"
+                      : "bg-white/60"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span className={classNames(
+                  "text-sm font-black",
+                  index === 0 ? "text-amber-500" : index === 1 ? "text-slate-400" : index === 2 ? "text-orange-400" : "text-slate-400"
+                )}>
+                  {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`}
+                </span>
+                <p className={classNames(
+                  "text-sm font-semibold",
+                  player.uid === currentUserId ? "text-teal" : "text-navy"
+                )}>
+                  {player.displayName}
+                </p>
+              </div>
+              <p className="font-display text-base font-bold text-slate-700 tabular-nums">
+                {t("pointsShort", { score: player.score })}
               </p>
-              <p className="font-bold text-slate-700">{t("pointsShort", { score: player.score })}</p>
             </div>
           ))}
         </div>
