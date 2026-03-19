@@ -34,7 +34,7 @@ export function useRoomState(code: string | null, uid: string | null): RoomBundl
       return;
     }
 
-    const roomCode = code.toUpperCase();
+    const roomCode = code;
     const roomDocRef = doc(db, "rooms", roomCode);
     const playerQuery = query(collection(db, "rooms", roomCode, "players"), orderBy("joinedAt", "asc"));
     const unsubscribers: Array<() => void> = [];
@@ -83,7 +83,7 @@ export function useRoomState(code: string | null, uid: string | null): RoomBundl
       return;
     }
 
-    const roomCode = code.toUpperCase();
+    const roomCode = code;
     const turnDocRef = doc(db, "rooms", roomCode, "turns", room.currentTurnId);
     const messageQuery = query(
       collection(db, "rooms", roomCode, "turns", room.currentTurnId, "messages"),
@@ -129,7 +129,7 @@ export function useRoomState(code: string | null, uid: string | null): RoomBundl
       return;
     }
 
-    const privateDocRef = doc(db, "rooms", code.toUpperCase(), "private", uid);
+    const privateDocRef = doc(db, "rooms", code, "private", uid);
 
     const unsubscribe = onSnapshot(privateDocRef, (snapshot) => {
       setPrivateState(snapshot.exists() ? (snapshot.data() as PrivatePlayerDoc) : null);

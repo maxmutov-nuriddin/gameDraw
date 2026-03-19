@@ -19,7 +19,7 @@ export function ChatPanel({ messages, turn, currentUserId, canGuess, onSend }: C
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const alreadySolved = useMemo(
     () => turn?.guessedPlayerIds.includes(currentUserId) ?? false,
     [currentUserId, turn?.guessedPlayerIds]
@@ -28,7 +28,8 @@ export function ChatPanel({ messages, turn, currentUserId, canGuess, onSend }: C
   const disabled = !canGuess || alreadySolved;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -70,6 +71,7 @@ export function ChatPanel({ messages, turn, currentUserId, canGuess, onSend }: C
       </div>
 
       <div
+        ref={scrollContainerRef}
         className="mt-4 flex-1 space-y-2 overflow-y-auto pr-1"
         data-scroll
         style={{ minHeight: "180px", maxHeight: "340px" }}
@@ -123,7 +125,6 @@ export function ChatPanel({ messages, turn, currentUserId, canGuess, onSend }: C
             </p>
           </div>
         ))}
-        <div ref={bottomRef} />
       </div>
 
       <form className="mt-3 flex gap-2" onSubmit={handleSubmit}>

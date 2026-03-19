@@ -9,12 +9,14 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { LobbyPanel } from "@/components/LobbyPanel";
 import { Panel } from "@/components/Panel";
 import { PlayerSidebar } from "@/components/PlayerSidebar";
+import { RejoinGate } from "@/components/RejoinGate";
 import { RoomGate } from "@/components/RoomGate";
 import { WordChoiceModal } from "@/components/WordChoiceModal";
 import {
   clearCanvas,
   createStroke,
   joinRoom,
+  leaveRoom,
   resetRoom,
   selectWord,
   sendMessage,
@@ -42,8 +44,15 @@ export default function RoomPage() {
   const { room, players, turn, messages, strokes, privateState, loading, error } = useRoomState(code, user?.uid ?? null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const currentPlayer = players.find((player) => player.uid === user?.uid) ?? null;
-  const leaderboard = useMemo(() => getLeaderboard(players), [players]);
+
+  // All players including those who left (leftAt != null)
+  const rawCurrentPlayer = players.find((player) => player.uid === user?.uid) ?? null;
+  // Only active players (not left)
+  const activePlayers = useMemo(() => players.filter((p) => !p.leftAt), [players]);
+  // Current player only if they're active
+  const currentPlayer = rawCurrentPlayer?.leftAt ? null : rawCurrentPlayer;
+
+  const leaderboard = useMemo(() => getLeaderboard(activePlayers), [activePlayers]);
   const secondsLeft = useCountdown(room?.turnEndsAt ?? null, 0);
   const intermissionSeconds = useCountdown(room?.intermissionEndsAt ?? null, 0);
   const isDrawer = room?.currentDrawerId === user?.uid;
@@ -53,14 +62,14 @@ export default function RoomPage() {
     Boolean(privateState?.selectedWord) &&
     room.currentTurnId === privateState?.turnId;
   const canGuess = Boolean(room && user && room.status === "drawing" && room.currentDrawerId !== user.uid);
-  const canStart = Boolean(room && currentPlayer && room.hostId === currentPlayer.uid && players.length >= (room?.minPlayers ?? 2));
+  const canStart = Boolean(room && currentPlayer && room.hostId === currentPlayer.uid && activePlayers.length >= (room?.minPlayers ?? 2));
 
   useHostGameEngine({
     code,
     uid: user?.uid ?? null,
     room,
     turn,
-    players,
+    players: activePlayers,
     messages
   });
 
@@ -94,13 +103,38 @@ export default function RoomPage() {
     });
   };
 
+  const handleRejoin = async () => {
+    if (!code || !user) {
+      return;
+    }
+
+    await withAction("rejoin", async () => {
+      await joinRoom(code, user.uid, displayName);
+    });
+  };
+
+  const handleLeave = async () => {
+    if (!code || !user) {
+      await router.push("/");
+      return;
+    }
+
+    try {
+      await leaveRoom(code, user.uid);
+    } catch {
+      // ignore — still navigate away
+    }
+
+    await router.push("/");
+  };
+
   const handleStart = async () => {
     if (!code || !user) {
       return;
     }
 
     await withAction("start", async () => {
-      await startGame(code, user.uid, players, room?.minPlayers, room?.maxPlayers);
+      await startGame(code, user.uid, activePlayers, room?.minPlayers, room?.maxPlayers);
     });
   };
 
@@ -165,10 +199,11 @@ export default function RoomPage() {
     }
 
     await withAction("reset", async () => {
-      await resetRoom(code, user.uid, players);
+      await resetRoom(code, user.uid, activePlayers);
     });
   };
 
+  // ── Loading ────────────────────────────────────────────────
   if (authLoading || loading) {
     return (
       <main className="page-shell flex min-h-screen items-center justify-center px-4 py-10">
@@ -221,6 +256,26 @@ export default function RoomPage() {
     );
   }
 
+  // ── Player left — show rejoin gate ─────────────────────────
+  if (rawCurrentPlayer?.leftAt) {
+    return (
+      <>
+        <Head>
+          <title>{t("rejoinTitle")} | {t("appName")}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+        </Head>
+        <RejoinGate
+          code={code}
+          leftAt={rawCurrentPlayer.leftAt}
+          onRejoin={handleRejoin}
+          loading={busyAction === "rejoin"}
+          error={actionError}
+        />
+      </>
+    );
+  }
+
+  // ── Player not in room yet — show join gate ────────────────
   if (!currentPlayer) {
     return (
       <>
@@ -240,6 +295,7 @@ export default function RoomPage() {
     );
   }
 
+  // ── Main game UI ───────────────────────────────────────────
   return (
     <>
       <Head>
@@ -262,7 +318,7 @@ export default function RoomPage() {
                   {t("roomLabel", { code: room.code })}
                 </h1>
                 <span className="rounded-xl bg-white/80 px-3 py-1 text-xs font-bold text-slate-500 shadow-soft">
-                  {players.length}/{room.maxPlayers} 👥 {t("players")}
+                  {activePlayers.length}/{room.maxPlayers} 👥 {t("players")}
                 </span>
                 <span className={`rounded-xl px-3 py-1 text-xs font-bold shadow-soft ${
                   room.status === "drawing"
@@ -292,9 +348,13 @@ export default function RoomPage() {
                   🔄 {t("playAgain")}
                 </button>
               ) : null}
-              <Link href="/" className="rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-white">
+              <button
+                type="button"
+                onClick={() => void handleLeave()}
+                className="rounded-2xl bg-white/80 px-4 py-2.5 text-sm font-semibold text-slate-600 shadow-soft transition hover:bg-rose-50 hover:text-rose-600"
+              >
                 {t("leaveRoom")}
-              </Link>
+              </button>
             </div>
           </header>
 
@@ -310,7 +370,7 @@ export default function RoomPage() {
           {room.status === "lobby" ? (
             <LobbyPanel
               room={room}
-              players={players}
+              players={activePlayers}
               currentUserId={currentPlayer.uid}
               onToggleReady={(ready) => toggleReady(code, currentPlayer.uid, ready)}
               onStart={handleStart}
@@ -390,7 +450,7 @@ export default function RoomPage() {
                 <PlayerSidebar
                   room={room}
                   turn={turn}
-                  players={players}
+                  players={activePlayers}
                   currentUserId={currentPlayer.uid}
                   secondsLeft={secondsLeft}
                   onReaction={handleReaction}
@@ -406,7 +466,7 @@ export default function RoomPage() {
                       <h3 className="mt-1.5 font-display text-2xl font-black text-navy sm:text-3xl">
                         {room.firstCorrectId
                           ? `🎉 ${t("playerSolvedFirst", {
-                              name: players.find((player) => player.uid === room.firstCorrectId)?.displayName ?? t("genericPlayer")
+                              name: activePlayers.find((player) => player.uid === room.firstCorrectId)?.displayName ?? t("genericPlayer")
                             })}`
                           : `😅 ${t("nobodySolved")}`}
                       </h3>

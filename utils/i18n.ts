@@ -150,7 +150,15 @@ const translations = {
     roomCodePlaceholder: "123456",
     hostYou: "Host (you)",
     readyCheck: "✓ Ready",
-    waitingCheck: "Waiting..."
+    waitingCheck: "Waiting...",
+    rejoinWindow: "Rejoin Window",
+    rejoinTitle: "You left the room",
+    rejoinDescription: "You can rejoin within {seconds} seconds.",
+    rejoinButton: "Rejoin Room",
+    rejoining: "Rejoining...",
+    rejoinExpiredTitle: "Rejoin window expired",
+    rejoinExpiredDesc: "The 1-minute rejoin window has passed. You can no longer rejoin this room.",
+    errorRejoinExpired: "Rejoin window has expired."
   },
   uz: {
     appName: "Draw & Guess",
@@ -290,7 +298,15 @@ const translations = {
     roomCodePlaceholder: "123456",
     hostYou: "Host (siz)",
     readyCheck: "✓ Tayyor",
-    waitingCheck: "Kutmoqda..."
+    waitingCheck: "Kutmoqda...",
+    rejoinWindow: "Qayta kirish oynasi",
+    rejoinTitle: "Siz xonadan chiqdingiz",
+    rejoinDescription: "{seconds} soniya ichida qayta kirishingiz mumkin.",
+    rejoinButton: "Xonaga qayta kirish",
+    rejoining: "Kirilmoqda...",
+    rejoinExpiredTitle: "Qayta kirish muddati tugadi",
+    rejoinExpiredDesc: "1 daqiqalik qayta kirish oynasi o'tdi. Endi bu xonaga kirib bo'lmaydi.",
+    errorRejoinExpired: "Qayta kirish muddati tugadi."
   },
   ru: {
     appName: "Draw & Guess",
@@ -430,7 +446,15 @@ const translations = {
     roomCodePlaceholder: "123456",
     hostYou: "Хост (вы)",
     readyCheck: "✓ Готов",
-    waitingCheck: "Ожидание..."
+    waitingCheck: "Ожидание...",
+    rejoinWindow: "Окно повторного входа",
+    rejoinTitle: "Вы покинули комнату",
+    rejoinDescription: "Вы можете вернуться в течение {seconds} секунд.",
+    rejoinButton: "Вернуться в комнату",
+    rejoining: "Вход...",
+    rejoinExpiredTitle: "Окно повторного входа истекло",
+    rejoinExpiredDesc: "Минута ожидания прошла. Вы больше не можете войти в эту комнату.",
+    errorRejoinExpired: "Окно повторного входа истекло."
   }
 } as const;
 
@@ -465,7 +489,8 @@ const errorMap: Record<string, TranslationKey> = {
   "Only the host can advance rounds.": "errorHostAdvance",
   "Firebase environment variables are missing.": "errorFirebaseConfig",
   "Could not sign in anonymously.": "errorAnonymousAuth",
-  "Something went wrong.": "errorGeneric"
+  "Something went wrong.": "errorGeneric",
+  "Rejoin window has expired.": "errorRejoinExpired"
 };
 
 export function localizeErrorMessage(locale: Locale, message: string | null | undefined) {

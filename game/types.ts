@@ -18,8 +18,10 @@ export interface RoomDoc {
   currentDrawerId: string | null;
   currentTurnId: string | null;
   currentWordHash: string | null;
+  currentWordHashes: string[];
   maskedWord: string;
   revealedLetterIndexes: number[];
+  choosingEndsAt: number | null;
   turnEndsAt: number | null;
   intermissionEndsAt: number | null;
   canvasRevision: number;
@@ -38,6 +40,7 @@ export interface PlayerDoc {
   score: number;
   color: string;
   reaction: string | null;
+  leftAt: number | null;
   joinedAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }

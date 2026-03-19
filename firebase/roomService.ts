@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 
 import {
+  CHOOSING_SECONDS,
   DRAWER_POINTS,
   GUESS_POINTS,
   MAX_CHAT_LENGTH,
@@ -21,8 +22,10 @@ import {
   MIN_PLAYERS,
   ROUND_BREAK_MS,
   ROUND_SECONDS,
-  TOTAL_ROUNDS
+  TOTAL_ROUNDS,
+  WRONG_GUESS_PENALTY
 } from "@/game/constants";
+import { getAllTranslations } from "@/game/words";
 import { getPlayerColor, maskWord, pickRandomWords, shuffle } from "@/game/helpers";
 import type { MessageDoc, PlayerDoc, RoomDoc, TurnDoc } from "@/game/types";
 import { db } from "@/firebase/client";
@@ -75,6 +78,8 @@ async function reserveRoomCode() {
   throw new Error("Could not reserve a room code. Please try again.");
 }
 
+export const REJOIN_WINDOW_MS = 60 * 1000; // 1 minute
+
 function toPlayerWrite(uid: string, displayName: string, isHost: boolean) {
   return {
     uid,
@@ -84,6 +89,7 @@ function toPlayerWrite(uid: string, displayName: string, isHost: boolean) {
     score: 0,
     color: getPlayerColor(uid),
     reaction: null,
+    leftAt: null,
     joinedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
@@ -104,8 +110,10 @@ function defaultRoom(code: string, hostId: string, language: Locale): RoomDoc {
     currentDrawerId: null,
     currentTurnId: null,
     currentWordHash: null,
+    currentWordHashes: [],
     maskedWord: "",
     revealedLetterIndexes: [],
+    choosingEndsAt: null,
     turnEndsAt: null,
     intermissionEndsAt: null,
     canvasRevision: 0,
@@ -134,6 +142,7 @@ async function updatePlayersForNewGame(code: string, players: PlayerDoc[]) {
       isReady: false,
       score: 0,
       reaction: null,
+      leftAt: null,
       updatedAt: serverTimestamp()
     });
   });
@@ -182,10 +191,31 @@ export async function joinRoom(code: string, uid: string, displayName: string) {
   const batch = writeBatch(db);
 
   if (playerSnapshot.exists()) {
-    batch.update(playerRef(normalizedCode, uid), {
-      displayName: displayName.trim(),
-      updatedAt: serverTimestamp()
-    });
+    const existingPlayer = playerSnapshot.data() as PlayerDoc;
+    const leftAt = existingPlayer.leftAt ?? null;
+
+    if (leftAt !== null) {
+      const elapsed = Date.now() - leftAt;
+      if (elapsed > REJOIN_WINDOW_MS) {
+        throw new Error("Rejoin window has expired.");
+      }
+      // Within rejoin window — restore player
+      batch.update(playerRef(normalizedCode, uid), {
+        displayName: displayName.trim(),
+        leftAt: null,
+        updatedAt: serverTimestamp()
+      });
+      batch.update(roomRef(normalizedCode), {
+        playerCount: increment(1),
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      // Active player updating display name
+      batch.update(playerRef(normalizedCode, uid), {
+        displayName: displayName.trim(),
+        updatedAt: serverTimestamp()
+      });
+    }
   } else {
     batch.set(playerRef(normalizedCode, uid), toPlayerWrite(uid, displayName, false));
     batch.update(roomRef(normalizedCode), {
@@ -203,6 +233,35 @@ export async function toggleReady(code: string, uid: string, ready: boolean) {
     isReady: ready,
     updatedAt: serverTimestamp()
   });
+}
+
+export async function leaveRoom(code: string, uid: string) {
+  const playerSnapshot = await getDoc(playerRef(code, uid));
+
+  if (!playerSnapshot.exists()) {
+    return;
+  }
+
+  const player = playerSnapshot.data() as PlayerDoc;
+
+  if (player.leftAt !== null) {
+    // Already marked as left
+    return;
+  }
+
+  const batch = writeBatch(db);
+
+  batch.update(playerRef(code, uid), {
+    leftAt: Date.now(),
+    updatedAt: serverTimestamp()
+  });
+
+  batch.update(roomRef(code), {
+    playerCount: increment(-1),
+    updatedAt: serverTimestamp()
+  });
+
+  await batch.commit();
 }
 
 export async function setReaction(code: string, uid: string, reaction: string | null) {
@@ -308,8 +367,10 @@ export async function startGame(code: string, hostId: string, players: PlayerDoc
     currentDrawerId: drawerId,
     currentTurnId: turnId,
     currentWordHash: null,
+    currentWordHashes: [],
     maskedWord: "",
     revealedLetterIndexes: [],
+    choosingEndsAt: Date.now() + CHOOSING_SECONDS * 1000,
     turnEndsAt: null,
     intermissionEndsAt: null,
     canvasRevision: 0,
@@ -358,8 +419,10 @@ export async function resetRoom(code: string, hostId: string, players: PlayerDoc
     currentDrawerId: null,
     currentTurnId: null,
     currentWordHash: null,
+    currentWordHashes: [],
     maskedWord: "",
     revealedLetterIndexes: [],
+    choosingEndsAt: null,
     turnEndsAt: null,
     intermissionEndsAt: null,
     canvasRevision: 0,
@@ -375,6 +438,7 @@ export async function resetRoom(code: string, hostId: string, players: PlayerDoc
       isReady: false,
       score: 0,
       reaction: null,
+      leftAt: null,
       updatedAt: serverTimestamp()
     });
 
@@ -395,6 +459,9 @@ export async function resetRoom(code: string, hostId: string, players: PlayerDoc
 
 export async function selectWord(code: string, uid: string, turnId: string, word: string) {
   const wordHash = await hashWord(word);
+  // Compute hashes for all language translations so any language is accepted
+  const allTranslations = getAllTranslations(word);
+  const allHashes = await Promise.all(allTranslations.map(hashWord));
   const endAt = Date.now() + ROUND_SECONDS * 1000;
   const batch = writeBatch(db);
 
@@ -411,8 +478,10 @@ export async function selectWord(code: string, uid: string, turnId: string, word
   batch.update(roomRef(code), {
     status: "drawing",
     currentWordHash: wordHash,
+    currentWordHashes: allHashes,
     maskedWord: maskWord(word),
     revealedLetterIndexes: [],
+    choosingEndsAt: null,
     turnEndsAt: endAt,
     intermissionEndsAt: null,
     canvasRevision: 0,
@@ -510,17 +579,38 @@ export async function evaluateMessage(
     const latestTurn = turnSnapshot.data() as TurnDoc;
     const latestMessage = messageSnapshot.data() as MessageDoc;
 
+    // Accept guess if it matches any of the stored hashes (any language)
+    const validHashes: string[] = latestRoom.currentWordHashes?.length
+      ? latestRoom.currentWordHashes
+      : latestRoom.currentWordHash
+        ? [latestRoom.currentWordHash]
+        : [];
+    const isCorrectGuess = validHashes.includes(latestMessage.guessHash);
+
+    const isDrawer = latestMessage.playerId === latestTurn.drawerId;
+    const alreadyGuessed = latestTurn.guessedPlayerIds.includes(latestMessage.playerId);
+
     if (
       latestRoom.status !== "drawing" ||
       latestTurn.status !== "drawing" ||
       latestMessage.evaluatedAt ||
-      latestMessage.playerId === latestTurn.drawerId ||
-      latestTurn.guessedPlayerIds.includes(latestMessage.playerId) ||
-      latestMessage.guessHash !== latestRoom.currentWordHash
+      isDrawer ||
+      alreadyGuessed
     ) {
-      transaction.update(messageRef, {
-        evaluatedAt: serverTimestamp()
-      });
+      transaction.update(messageRef, { evaluatedAt: serverTimestamp() });
+      return;
+    }
+
+    if (!isCorrectGuess) {
+      // Wrong guess — apply penalty
+      const penalizedPlayerRef = playerRef(code, latestMessage.playerId);
+      const penalizedSnapshot = await transaction.get(penalizedPlayerRef);
+      if (penalizedSnapshot.exists()) {
+        const penalizedPlayer = penalizedSnapshot.data() as PlayerDoc;
+        const newScore = Math.max(0, (penalizedPlayer.score ?? 0) - WRONG_GUESS_PENALTY);
+        transaction.update(penalizedPlayerRef, { score: newScore, updatedAt: serverTimestamp() });
+      }
+      transaction.update(messageRef, { evaluatedAt: serverTimestamp() });
       return;
     }
 
@@ -613,6 +703,69 @@ export async function endRoundFromTimer(code: string, hostId: string) {
   });
 }
 
+export async function skipDrawerTurn(code: string, hostId: string) {
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(roomRef(code));
+
+    if (!snapshot.exists()) {
+      return;
+    }
+
+    const room = snapshot.data() as RoomDoc;
+
+    if (
+      room.hostId !== hostId ||
+      room.status !== "choosing" ||
+      !room.choosingEndsAt ||
+      room.choosingEndsAt > Date.now()
+    ) {
+      return;
+    }
+
+    if (room.currentTurnId) {
+      transaction.update(turnRef(code, room.currentTurnId), {
+        status: "ended",
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    transaction.update(roomRef(code), {
+      status: "round_end",
+      choosingEndsAt: null,
+      intermissionEndsAt: Date.now() + ROUND_BREAK_MS,
+      updatedAt: serverTimestamp()
+    });
+  });
+}
+
+export async function endRoundEarly(code: string, hostId: string) {
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(roomRef(code));
+
+    if (!snapshot.exists()) {
+      return;
+    }
+
+    const room = snapshot.data() as RoomDoc;
+
+    if (room.hostId !== hostId || room.status !== "drawing" || !room.currentTurnId) {
+      return;
+    }
+
+    transaction.update(roomRef(code), {
+      status: "round_end",
+      intermissionEndsAt: Date.now() + ROUND_BREAK_MS,
+      turnEndsAt: null,
+      updatedAt: serverTimestamp()
+    });
+
+    transaction.update(turnRef(code, room.currentTurnId), {
+      status: "ended",
+      updatedAt: serverTimestamp()
+    });
+  });
+}
+
 export async function advanceRound(code: string, hostId: string, room: RoomDoc, players: PlayerDoc[]) {
   if (room.hostId !== hostId) {
     throw new Error("Only the host can advance rounds.");
@@ -651,8 +804,10 @@ export async function advanceRound(code: string, hostId: string, room: RoomDoc, 
     currentDrawerId: drawerId,
     currentTurnId: turnId,
     currentWordHash: null,
+    currentWordHashes: [],
     maskedWord: "",
     revealedLetterIndexes: [],
+    choosingEndsAt: Date.now() + CHOOSING_SECONDS * 1000,
     turnEndsAt: null,
     intermissionEndsAt: null,
     canvasRevision: 0,
@@ -699,17 +854,12 @@ export function getLeaderboard(players: PlayerDoc[]) {
 }
 
 export function shouldEvaluateMessage(room: RoomDoc | null, turn: TurnDoc | null, message: MessageDoc) {
-  return Boolean(
-    room &&
-      turn &&
-      room.status === "drawing" &&
-      turn.status === "drawing" &&
-      room.currentWordHash &&
-      message.type === "guess" &&
-      !message.evaluatedAt &&
-      normalizeWord(message.text) &&
-      message.guessHash === room.currentWordHash
-  );
+  if (!room || !turn) return false;
+  if (room.status !== "drawing" || turn.status !== "drawing") return false;
+  if (message.type !== "guess" || message.evaluatedAt || !normalizeWord(message.text)) return false;
+  if (message.playerId === turn.drawerId) return false;
+  if (turn.guessedPlayerIds.includes(message.playerId)) return false;
+  return true;
 }
 
 export function formatTimestamp(timestamp?: Timestamp | null) {

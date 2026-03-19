@@ -12,6 +12,8 @@ export const DRAWER_POINTS = 50;
 export const DEFAULT_BRUSH_SIZE = 6;
 export const MAX_BRUSH_SIZE = 36;
 export const HINT_REVEAL_SCHEDULE = [50, 30];
+export const CHOOSING_SECONDS = 60;
+export const WRONG_GUESS_PENALTY = 3;
 export const REACTIONS = ["👏", "🔥", "😂", "🤯", "😍", "💯", "🎨", "🏆"];
 
 export const PLAYER_COLORS = [

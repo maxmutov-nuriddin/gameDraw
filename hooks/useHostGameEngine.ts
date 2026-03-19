@@ -3,9 +3,11 @@ import { useEffect, useRef } from "react";
 import {
   addSystemMessage,
   advanceRound,
+  endRoundEarly,
   endRoundFromTimer,
   evaluateMessage,
-  shouldEvaluateMessage
+  shouldEvaluateMessage,
+  skipDrawerTurn
 } from "@/firebase/roomService";
 import type { MessageDoc, PlayerDoc, RoomDoc, TurnDoc } from "@/game/types";
 import { buildRoundSummary } from "@/utils/i18n";
@@ -54,6 +56,20 @@ export function useHostGameEngine({
     });
   }, [code, messages, room, turn, uid]);
 
+  // Choosing phase timeout — skip drawer if they don't pick a word in time
+  useEffect(() => {
+    if (!code || !uid || !room || room.hostId !== uid || room.status !== "choosing" || !room.choosingEndsAt) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void skipDrawerTurn(code, uid);
+    }, Math.max(room.choosingEndsAt - Date.now(), 0) + 150);
+
+    return () => window.clearTimeout(timeout);
+  }, [code, room, uid]);
+
+  // Drawing phase timer
   useEffect(() => {
     if (!code || !uid || !room || room.hostId !== uid || room.status !== "drawing" || !room.turnEndsAt) {
       return;
@@ -65,6 +81,26 @@ export function useHostGameEngine({
 
     return () => window.clearTimeout(timeout);
   }, [code, room, uid]);
+
+  // All non-drawer players answered — end round early
+  useEffect(() => {
+    if (!code || !uid || !room || !turn || room.hostId !== uid || room.status !== "drawing") {
+      return;
+    }
+
+    const nonDrawerPlayers = players.filter((p) => p.uid !== turn.drawerId && !p.leftAt);
+
+    if (nonDrawerPlayers.length === 0) {
+      return;
+    }
+
+    const playersWhoGuessed = new Set(messages.filter((m) => m.type === "guess").map((m) => m.playerId));
+    const allAnswered = nonDrawerPlayers.every((p) => playersWhoGuessed.has(p.uid));
+
+    if (allAnswered) {
+      void endRoundEarly(code, uid);
+    }
+  }, [code, uid, room, turn, players, messages]);
 
   useEffect(() => {
     if (
